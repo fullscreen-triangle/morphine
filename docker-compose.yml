@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: morphine
+      POSTGRES_USER: morphine
+      POSTGRES_PASSWORD: morphine_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./core/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U morphine"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for state management
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Rust Core Service
+  core:
+    build:
+      context: ./core
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://morphine:morphine_dev_password@postgres:5432/morphine
+      REDIS_URL: redis://redis:6379
+      BIND_ADDRESS: 0.0.0.0:3001
+      ANALYTICS_SERVICE_URL: http://analytics:8000
+      STREAM_STORAGE_PATH: /app/storage/streams
+      MAX_CONCURRENT_STREAMS: 10
+      STREAM_ACTIVATION_TIMEOUT: 300
+    ports:
+      - "3001:3001"
+    volumes:
+      - stream_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Python Analytics Service (Vibrio & Moriarty)
+  analytics:
+    build:
+      context: ./analytics
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+      CORE_SERVICE_URL: http://core:3001
+      MODEL_CACHE_PATH: /app/models
+      CUDA_VISIBLE_DEVICES: "0"  # Enable GPU if available
+    ports:
+      - "8000:8000"
+    volumes:
+      - model_cache:/app/models
+      - stream_storage:/app/streams:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Node.js API Service
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3000
+      CORE_SERVICE_URL: http://core:3001
+      ANALYTICS_SERVICE_URL: http://analytics:8000
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: your_jwt_secret_here
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+    depends_on:
+      - core
+      - analytics
+    restart: unless-stopped
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+      NEXT_PUBLIC_WS_URL: ws://localhost:3001/ws
+      NEXT_PUBLIC_CORE_URL: http://localhost:3001
+    ports:
+      - "3002:3000"
+    depends_on:
+      - api
+      - core
+    restart: unless-stopped
+
+  # NGINX Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - api
+      - core
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  model_cache:
+  stream_storage:
+
+networks:
+  default:
+    driver: bridge 
