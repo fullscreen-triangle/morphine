@@ -1,6 +1,8 @@
-# Morphine Platform
-
-> Computer Vision-Powered Streaming Platform with Real-Time Analytics and Micro-Betting
+<div align="center">
+  <img src="docs/assets/morphine_logo.gif" alt="Morphine Platform Logo" width="420">
+  <h1>Morphine Platform</h1>
+  <p><strong>Computer Vision-Powered Streaming Platform with Real-Time Analytics and Micro-Betting</strong></p>
+</div>
 
 ## Overview
 

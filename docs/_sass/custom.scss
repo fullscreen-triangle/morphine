@@ -1,0 +1,510 @@
+// Custom styles for Morphine Platform documentation
+
+// Variables
+$primary-color: #6c5ce7;
+$secondary-color: #a29bfe;
+$accent-color: #fd79a8;
+$dark-bg: #2d3748;
+$light-bg: #f7fafc;
+$border-color: #e2e8f0;
+$text-dark: #2d3748;
+$text-light: #718096;
+
+// Hero section
+.hero-title {
+  font-size: 3rem;
+  font-weight: 700;
+  color: $primary-color;
+  margin-bottom: 1rem;
+  text-align: center;
+  
+  @media (max-width: 768px) {
+    font-size: 2rem;
+  }
+}
+
+.hero-subtitle {
+  font-size: 1.25rem;
+  color: $text-light;
+  text-align: center;
+  margin-bottom: 2rem;
+  
+  @media (max-width: 768px) {
+    font-size: 1rem;
+  }
+}
+
+// Buttons
+.btn {
+  display: inline-block;
+  padding: 12px 24px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  margin: 0 8px 8px 0;
+  border: 2px solid transparent;
+  
+  &.btn-primary {
+    background-color: $primary-color;
+    color: white;
+    
+    &:hover {
+      background-color: darken($primary-color, 10%);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);
+    }
+  }
+  
+  &.btn-outline {
+    background-color: transparent;
+    color: $primary-color;
+    border-color: $primary-color;
+    
+    &:hover {
+      background-color: $primary-color;
+      color: white;
+      transform: translateY(-2px);
+    }
+  }
+  
+  &.btn-lg {
+    padding: 16px 32px;
+    font-size: 1.1rem;
+  }
+}
+
+// Feature grid
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin: 3rem 0;
+}
+
+.feature-card {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border: 1px solid $border-color;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  }
+  
+  h3 {
+    color: $primary-color;
+    margin-bottom: 1rem;
+    font-size: 1.25rem;
+  }
+  
+  p {
+    color: $text-light;
+    line-height: 1.6;
+  }
+}
+
+// Code blocks
+pre {
+  background-color: $dark-bg !important;
+  border-radius: 8px;
+  padding: 1.5rem;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  border: 1px solid #4a5568;
+  
+  code {
+    background-color: transparent !important;
+    color: #e2e8f0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+}
+
+code {
+  background-color: #f7fafc;
+  color: $primary-color;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-weight: 500;
+}
+
+// Tables
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2rem 0;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  
+  th, td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid $border-color;
+  }
+  
+  th {
+    background-color: $light-bg;
+    font-weight: 600;
+    color: $text-dark;
+  }
+  
+  tr:hover {
+    background-color: #f8f9fa;
+  }
+  
+  tr:last-child td {
+    border-bottom: none;
+  }
+}
+
+// CTA section
+.cta-section {
+  background: linear-gradient(135deg, $primary-color, $secondary-color);
+  color: white;
+  padding: 3rem 2rem;
+  border-radius: 12px;
+  text-align: center;
+  margin: 3rem 0;
+  
+  h2 {
+    margin-bottom: 1rem;
+    font-size: 2rem;
+  }
+  
+  p {
+    font-size: 1.1rem;
+    margin-bottom: 2rem;
+    opacity: 0.9;
+  }
+  
+  .btn-primary {
+    background-color: white;
+    color: $primary-color;
+    
+    &:hover {
+      background-color: #f8f9fa;
+      transform: translateY(-2px);
+    }
+  }
+}
+
+// Navigation improvements
+.site-nav {
+  .page-link {
+    color: $text-dark;
+    font-weight: 500;
+    transition: color 0.3s ease;
+    
+    &:hover {
+      color: $primary-color;
+    }
+  }
+}
+
+// Header improvements
+.site-header {
+  border-bottom: 1px solid $border-color;
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  
+  .site-title {
+    color: $primary-color !important;
+    font-weight: 700;
+    font-size: 1.5rem;
+    
+    &:hover {
+      text-decoration: none;
+      color: darken($primary-color, 10%) !important;
+    }
+  }
+}
+
+// Content improvements
+.post-content {
+  h1, h2, h3, h4, h5, h6 {
+    color: $text-dark;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+  }
+  
+  h1 {
+    font-size: 2.5rem;
+    border-bottom: 3px solid $primary-color;
+    padding-bottom: 0.5rem;
+  }
+  
+  h2 {
+    font-size: 2rem;
+    color: $primary-color;
+  }
+  
+  h3 {
+    font-size: 1.5rem;
+  }
+  
+  p {
+    line-height: 1.7;
+    margin-bottom: 1.5rem;
+  }
+  
+  ul, ol {
+    margin-bottom: 1.5rem;
+    
+    li {
+      margin-bottom: 0.5rem;
+      line-height: 1.6;
+    }
+  }
+}
+
+// Responsive design
+@media (max-width: 768px) {
+  .feature-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .feature-card {
+    padding: 1.5rem;
+  }
+  
+  .cta-section {
+    padding: 2rem 1rem;
+    
+    h2 {
+      font-size: 1.5rem;
+    }
+  }
+  
+  table {
+    font-size: 0.9rem;
+    
+    th, td {
+      padding: 8px 12px;
+    }
+  }
+}
+
+// Syntax highlighting improvements
+.highlight {
+  border-radius: 8px;
+  
+  .c { color: #6a737d; } // Comments
+  .k { color: #d73a49; } // Keywords
+  .s { color: #032f62; } // Strings
+  .n { color: #6f42c1; } // Names
+  .o { color: #d73a49; } // Operators
+  .p { color: #24292e; } // Punctuation
+}
+
+// Loading animation
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.feature-card, .cta-section {
+  animation: fadeIn 0.6s ease-out;
+}
+
+// Mermaid diagram styling
+.mermaid {
+  text-align: center;
+  margin: 2rem 0;
+}
+
+// Logo styles
+.logo-header {
+  text-align: center;
+  margin: 2rem 0;
+  padding: 1rem 0;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+}
+
+.platform-logo {
+  width: 120px;
+  height: 120px;
+  max-width: 100%;
+  transition: transform 0.3s ease, filter 0.3s ease;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
+  border-radius: 8px;
+  
+  // Optimize GIF animation performance
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  
+  &:hover {
+    transform: scale(1.05);
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.25));
+  }
+  
+  // Animation controls for accessibility
+  @media (prefers-reduced-motion: reduce) {
+    animation-play-state: paused;
+    
+    &:hover {
+      animation-play-state: running;
+    }
+  }
+}
+
+// Page logo (smaller, for documentation pages) - use static SVG for docs
+.page-logo {
+  text-align: center;
+  margin: 1rem 0;
+  opacity: 0.9;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+
+.page-logo-img {
+  width: 48px;
+  height: 48px;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  filter: drop-shadow(0 2px 4px rgba(107, 114, 128, 0.25));
+  
+  &:hover {
+    opacity: 1;
+    transform: scale(1.1);
+    filter: drop-shadow(0 3px 6px rgba(107, 114, 128, 0.35));
+  }
+}
+
+// Site header logo (use animated GIF in header)
+.site-header .site-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  
+  &:before {
+    content: '';
+    background-image: url('/assets/morphine_logo.gif');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    width: 32px;
+    height: 32px;
+    display: inline-block;
+    vertical-align: middle;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+    transition: filter 0.3s ease;
+    border-radius: 4px;
+    
+    &:hover {
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    }
+    
+    // Fallback for older browsers or if GIF fails to load
+    @supports not (background-image: url('/assets/morphine_logo.gif')) {
+      background-image: url('/assets/Morphine2DCSDS.svg');
+    }
+  }
+}
+
+// Enhanced animation controls
+.logo-animation-control {
+  .platform-logo {
+    cursor: pointer;
+    
+    &.paused {
+      animation-play-state: paused;
+      opacity: 0.8;
+    }
+    
+    &.playing {
+      animation-play-state: running;
+      opacity: 1;
+    }
+  }
+}
+
+// Responsive logo sizing
+@media (max-width: 768px) {
+  .platform-logo {
+    width: 80px;
+    height: 80px;
+  }
+  
+  .page-logo-img {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .site-header .site-title:before {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .platform-logo {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .page-logo-img {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .site-header .site-title:before {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+// Dark mode logo adjustments
+@media (prefers-color-scheme: dark) {
+  .platform-logo,
+  .page-logo-img,
+  .site-header .site-title:before {
+    filter: brightness(1.2) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    
+    &:hover {
+      filter: brightness(1.3) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+    }
+  }
+  
+  .logo-header {
+    background: rgba(0, 0, 0, 0.1);
+  }
+  
+  .page-logo {
+    background: rgba(0, 0, 0, 0.05);
+  }
+}
+
+// High contrast mode for accessibility
+@media (prefers-contrast: high) {
+  .platform-logo,
+  .page-logo-img {
+    filter: contrast(1.2) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+    
+    &:hover {
+      filter: contrast(1.3) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
+    }
+  }
+}
+
+// Alternative logo styles for better visibility
+.logo-contrast {
+  .platform-logo,
+  .page-logo-img {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    padding: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+} 

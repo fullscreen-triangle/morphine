@@ -1,0 +1,99 @@
+title: Morphine Platform
+description: Computer Vision-Powered Streaming Platform with Real-Time Analytics and Micro-Betting
+baseurl: "" # the subpath of your site, e.g. /blog
+url: "" # the base hostname & protocol for your site
+
+# Logo configuration
+logo: /assets/morphine_logo.gif
+logo_alt: Morphine Platform Logo
+logo_fallback: /assets/Morphine2DCSDS.svg
+
+# Favicon configuration
+favicon: /assets/Morphine2DCSDS.svg
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+theme: minima
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+  - jekyll-seo-tag
+
+# Navigation
+header_pages:
+  - index.md
+  - architecture.md
+  - computer-vision.md
+  - streaming-implementation.md
+  - micro-betting.md
+  - getting-started.md
+  - api-reference.md
+
+# GitHub
+github_username: your-username
+repository: morphine
+
+# SEO
+twitter:
+  username: your-username
+  card: summary_large_image
+social:
+  name: Morphine Platform
+  links:
+    - https://github.com/your-username/morphine
+
+# SEO and social media
+author:
+  name: Morphine Platform
+  picture: /assets/morphine_logo.gif
+  
+# Social sharing images (use static version for better compatibility)
+social_image: /assets/Morphine2DCSDS.svg.png
+image: /assets/Morphine2DCSDS.svg.png
+
+# Custom variables
+version: "1.0.0"
+latest_release: "v1.0.0"
+
+# Collections
+collections:
+  docs:
+    output: true
+    permalink: /:collection/:name/
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: "page"
+  - scope:
+      path: ""
+      type: "docs"
+    values:
+      layout: "page"
+
+# Sass
+sass:
+  sass_dir: _sass
+  style: compressed
+
+# Custom CSS
+minima:
+  custom_css:
+    - custom.scss
+  # Logo configuration for minima theme
+  logo: /assets/morphine_logo.gif
+
+# Exclude from processing
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
+  - README.md 
