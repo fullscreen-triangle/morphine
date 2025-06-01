@@ -1,167 +1,53 @@
-# Morphine: Metacognitive Orchestration Platform
+# Morphine: Live Streaming Platform with Microbetting
 
-> Revolutionary AI-powered streaming platform with biomimetic intelligence, nanosecond-precise geolocation, and hybrid reasoning systems
+<div align="center">
+  <img src="docs/assets/morphine_logo.gif" alt="Morphine Logo" width="400"/>
+</div>
 
-## 🧬 What is Morphine?
+> Live streaming platform with real-time computer vision analytics and microbetting functionality
 
-Morphine is not just another streaming platform—it's a **visionary metacognitive orchestration system** that implements cutting-edge research in artificial intelligence, biomimetic computing, and real-time decision making. The platform combines three groundbreaking research frameworks to create an unprecedented system capable of:
+## 🎥 What is Morphine?
 
-- **🧠 Making decisions with partial information** (like human intuition)
-- **🌍 Nanosecond-precise location verification** (preventing on-site participation fraud)
-- **⚖️ Hybrid reasoning** (combining imperative, logical, and fuzzy programming paradigms)
-- **🔄 Streaming intelligence** (real-time AI orchestration without waiting for complete data)
+Morphine is a **live streaming platform** that enables viewers to place **microbets** on stream events using real-time computer vision analytics. Watch live streams and bet on what happens next - from sports performance to gaming achievements.
 
-## 🎯 The Vision
+Key Features:
+- **🔴 Live Streaming** - High-quality video streaming with low latency
+- **💰 Microbetting** - Place small bets on live stream events  
+- **🤖 Smart Analytics** - Computer vision automatically detects betting opportunities
+- **⚡ Real-time** - Instant bet placement and settlement based on live video analysis
+- **📊 Live Data** - Real-time analytics dashboard with performance metrics
 
-Traditional streaming platforms are passive content delivery systems. Morphine is an **active intelligence platform** that:
+## 🎯 How It Works
 
-1. **Understands what's happening** in real-time using advanced computer vision
-2. **Makes sophisticated decisions** using biomimetic metacognitive processing  
-3. **Verifies participant locations** with military-grade precision
-4. **Settles complex interactions** using hybrid reasoning engines
-5. **Learns and adapts** through metabolic processing cycles
+1. **Stream Content** - Content creators stream live video (sports, gaming, etc.)
+2. **AI Detection** - Computer vision analyzes the stream in real-time
+3. **Betting Markets** - System creates betting opportunities based on detected events  
+4. **Place Bets** - Viewers place microbets on stream outcomes
+5. **Auto Settlement** - Bets are automatically settled using computer vision analysis
 
-Think of it as giving a streaming platform a **brain, consciousness, and decision-making capabilities**.
+## 🏗️ Platform Architecture
 
-## 🏗️ Revolutionary Architecture
-
-### Three-Layer Biomimetic Intelligence (Izinyoka Framework)
-
+### Streaming + Betting Stack
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      METACOGNITIVE ORCHESTRATOR                     │
-├─────────────────────────────────────────────────────────────────────┤
-│  Context Layer    │  Reasoning Layer   │   Intuition Layer          │
-│  ┌─────────────┐  │  ┌──────────────┐  │  ┌──────────────┐         │
-│  │ Data Fusion │  │  │ Logic Engine │  │  │ Pattern Sync │         │
-│  │ Multi-Source│  │  │ Constraint   │  │  │ Uncertainty  │         │
-│  │ Real-time   │  │  │ Solver       │  │  │ Resolution   │         │
-│  └─────────────┘  │  └──────────────┘  │  └──────────────┘         │
-├─────────────────────────────────────────────────────────────────────┤
-│                     METABOLIC PROCESSING                            │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐           │
-│  │ Glycolytic  │     │ Lactate     │     │ Dreaming    │           │
-│  │ Cycle       │     │ Cycle       │     │ Module      │           │
-│  │ (Resource   │     │ (Partial    │     │ (Pattern    │           │
-│  │ Management) │     │ Results)    │     │ Discovery)  │           │
-│  └─────────────┘     └─────────────┘     └─────────────┘           │
-└─────────────────────────────────────────────────────────────────────┘
+Frontend (Next.js)     → Live streaming interface with betting controls
+API (Node.js)          → Real-time betting API with WebSocket support  
+Analytics (Python)     → Computer vision for automatic bet detection
+Core (Rust)            → High-performance bet processing and settlement
 ```
 
-**What this means:** The system processes information like a biological brain, with specialized layers handling different types of thinking and metabolic cycles managing resources and learning.
+### Computer Vision Analytics
 
-### Nanosecond-Precise Geolocation (Sighthound Framework)
+#### Stream Analysis
+- **Real-time object detection** - Track players, objects, and actions
+- **Event recognition** - Automatically identify bettable moments
+- **Performance metrics** - Speed, accuracy, and achievement tracking
+- **Highlight detection** - Find key moments for betting opportunities
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    GEOLOCATION VERIFICATION                         │
-├─────────────────────────────────────────────────────────────────────┤
-│  Multi-Source Fusion    │  Kalman Filtering  │  Exclusion Zones     │
-│  ┌─────────────────┐    │  ┌──────────────┐  │  ┌─────────────────┐ │
-│  │ GPS + Cellular  │    │  │ Smoothing &  │  │  │ Event Location  │ │
-│  │ WiFi + Video    │ -> │  │ Prediction   │  │  │ Competitor Zone │ │
-│  │ Frame Tags      │    │  │ Confidence   │  │  │ Legal Restrict  │ │
-│  └─────────────────┘    │  └──────────────┘  │  └─────────────────┘ │
-│                         │                    │                      │
-│  Nanosecond Timestamps  │  Crypto Proofs     │  Blockchain Ready    │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-**What this means:** Every video frame is tagged with nanosecond-precise timestamps and correlated with verified locations, making it impossible for someone at the event location to participate in betting.
-
-### Hybrid Reasoning Engine
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    HYBRID REASONING ENGINE                          │
-├─────────────────────────────────────────────────────────────────────┤
-│  Imperative Engine      │  Logical Engine    │  Fuzzy Engine        │
-│  ┌─────────────────┐    │  ┌──────────────┐  │  ┌─────────────────┐ │
-│  │ Rule Execution  │    │  │ Predicate    │  │  │ Membership      │ │
-│  │ Step-by-Step    │ +  │  │ Truth Logic  │  │  │ Functions       │ │
-│  │ Control Flow    │    │  │ Constraints  │  │  │ Fuzzy Logic     │ │
-│  └─────────────────┘    │  └──────────────┘  │  └─────────────────┘ │
-│                         │                    │                      │
-│  Settlement Methods: Winner-Takes-All, Proportional, Tiered,        │
-│                     Fuzzy-Proportional, Hybrid-Distribution         │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-**What this means:** Instead of simple win/lose decisions, the system can handle complex scenarios using three different reasoning approaches simultaneously, then combine them for sophisticated outcomes.
-
-## 🔬 Core Technologies Explained
-
-### Backend Intelligence Stack
-- **`core/` (Rust)** - High-performance orchestration engine with nanosecond precision
-- **`analytics/` (Python)** - Advanced computer vision with Vibrio & Moriarty frameworks
-- **`api/` (Node.js)** - Real-time API layer with WebSocket streaming
-- **`frontend/` (Next.js)** - Sophisticated user interface with real-time analytics
-
-### Computer Vision Frameworks
-
-#### Vibrio Framework
-**Purpose:** General computer vision and object tracking
-- Real-time human detection and tracking
-- Motion analysis and optical flow
-- Speed estimation and trajectory prediction
-- Automated highlight detection
-
-#### Moriarty Framework  
-**Purpose:** Sports-specific biomechanical analysis
-- Human pose estimation using MediaPipe
-- Joint angle and velocity analysis
-- Center of mass calculations
-- Athletic performance metrics
-
-### Advanced Features
-
-#### Streaming Decisions
-Unlike traditional systems that wait for complete information, Morphine makes intelligent decisions with partial data:
-
-```rust
-// Example: Make betting decisions before complete analysis
-pub async fn handle_partial_result(&self, partial: PartialResult) -> Decision {
-    let confidence = self.estimate_confidence(&partial);
-    
-    if confidence > self.decision_threshold {
-        // Make decision now with partial data
-        self.create_decision(&partial).await
-    } else {
-        // Store for later when more data arrives
-        self.lactate_store.accumulate(partial).await;
-        Decision::Pending
-    }
-}
-```
-
-#### Location Verification
-Every transaction is cryptographically linked to verified location data:
-
-```rust
-// Nanosecond-precise transaction verification
-pub async fn create_transaction_verification(
-    &self,
-    transaction_id: String,
-    video_evidence: VideoEvidence
-) -> Result<TransactionVerification> {
-    let timestamp_ns = self.precision_timer.get_nanosecond_timestamp().await;
-    
-    // Link video frame to geographic location
-    let frame_location = self.correlate_frame_location(&video_evidence.frame_hash)?;
-    
-    // Create cryptographic proof
-    let proof = format!("proof_{}", sha256::digest(format!(
-        "{}:{}:{}:{}",
-        transaction_id, timestamp_ns, 
-        frame_location.latitude, video_evidence.frame_hash
-    )));
-    
-    // Check if user is in excluded zone
-    let is_excluded = self.check_exclusion_zones(&frame_location).await;
-    
-    Ok(TransactionVerification { /* ... */ })
-}
-```
+#### Betting Integration  
+- **Smart bet creation** - AI suggests betting markets based on video analysis
+- **Instant settlement** - Bets resolved immediately using computer vision
+- **Live odds** - Dynamic odds based on real-time performance data
+- **Fair play** - Transparent, automated settlement with video evidence
 
 ## 🚀 Getting Started
 
