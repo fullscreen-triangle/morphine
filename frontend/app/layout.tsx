@@ -7,24 +7,24 @@ import { Toaster } from 'react-hot-toast';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Morphine Platform',
-  description: 'Computer Vision-Powered Streaming Platform with Real-Time Analytics and Micro-Betting',
-  keywords: 'streaming, computer vision, analytics, betting, real-time',
-  authors: [{ name: 'Morphine Platform' }],
-  creator: 'Morphine Platform',
-  publisher: 'Morphine Platform',
+  title: 'Morphine - Revolutionary Universal Prediction & Expertise Economy Platform',
+  description: 'The world\'s first Universal Human Knowledge Sharing Economy. Transform any live content into engaging multi-dimensional prediction experiences while creating transferable wealth from pure entertainment. Expert knowledge overlay system where any expert\'s insights can enhance any compatible video content globally.',
+  keywords: 'universal predictions, expertise economy, knowledge overlay, annotation models, expert monetization, brand engagement revolution, social viewing, passive income, global education, streaming platform, computer vision, real-time analytics, collaborative intelligence',
+  authors: [{ name: 'Morphine Revolutionary Platform' }],
+  creator: 'Morphine Revolutionary Platform',
+  publisher: 'Morphine Revolutionary Platform',
   openGraph: {
     type: 'website',
     locale: 'en_US',
     url: 'https://morphine.app',
-    title: 'Morphine Platform',
-    description: 'Computer Vision-Powered Streaming Platform with Real-Time Analytics and Micro-Betting',
-    siteName: 'Morphine Platform',
+    title: 'Morphine - Revolutionary Universal Human Knowledge Sharing Economy',
+    description: 'The world\'s first platform where human expertise becomes infinitely scalable digital assets, transforming every video into a potential masterclass while creating passive income streams for experts worldwide.',
+    siteName: 'Morphine Revolutionary Platform',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Morphine Platform',
-    description: 'Computer Vision-Powered Streaming Platform with Real-Time Analytics and Micro-Betting',
+    title: 'Morphine - Universal Human Knowledge Sharing Economy',
+    description: 'Revolutionary platform: Entertainment creates wealth, expertise becomes inheritance, knowledge becomes universally accessible. Any expert can create annotation models that enhance unlimited videos globally.',
   },
   robots: {
     index: true,
