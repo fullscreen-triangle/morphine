@@ -2,22 +2,24 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+import time
 
 import structlog
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import aioredis
 import numpy as np
 import cv2
-from ultralytics import YOLO
+import base64
 
-from frameworks.vibrio import VibrioAnalyzer
-from frameworks.moriarty import MoriartyPipeline
-from models.analytics import AnalyticsResult, FrameData, StreamAnalytics
-from services.redis_service import RedisService
-from services.stream_service import StreamService
+from src.frameworks.vibrio import VibrioAnalyzer
+from src.frameworks.moriarty import MoriartyPipeline
+from src.models.analytics import AnalyticsResult, FrameData, StreamAnalytics
+from src.services.redis_service import RedisService
+from src.services.stream_service import StreamService
+from src.video.ingestion import VideoIngestionPipeline, StreamConfig, StreamSource
 
 # Configure logging
 structlog.configure(
@@ -40,11 +42,12 @@ vibrio_analyzer = None
 moriarty_pipeline = None
 redis_service = None
 stream_service = None
+video_pipeline = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
-    global vibrio_analyzer, moriarty_pipeline, redis_service, stream_service
+    global vibrio_analyzer, moriarty_pipeline, redis_service, stream_service, video_pipeline
     
     logger.info("Starting Morphine Analytics Service")
     
@@ -54,8 +57,11 @@ async def lifespan(app: FastAPI):
     await redis_service.connect()
     
     # Initialize Stream service
-    core_url = os.getenv("CORE_SERVICE_URL", "http://localhost:3001")
+    core_url = os.getenv("CORE_SERVICE_URL", "http://localhost:8000")
     stream_service = StreamService(core_url, redis_service)
+    
+    # Initialize video ingestion pipeline
+    video_pipeline = VideoIngestionPipeline()
     
     # Initialize Vibrio analyzer
     vibrio_analyzer = VibrioAnalyzer(
@@ -77,6 +83,8 @@ async def lifespan(app: FastAPI):
     
     # Cleanup
     logger.info("Shutting down analytics service")
+    if video_pipeline:
+        await video_pipeline.shutdown()
     if redis_service:
         await redis_service.close()
 
@@ -100,7 +108,7 @@ app.add_middleware(
 # Request/Response models
 class FrameProcessRequest(BaseModel):
     stream_id: str
-    frame_data: bytes
+    frame_data: str  # Base64 encoded frame
     timestamp: float
     frame_idx: int
 
@@ -112,26 +120,42 @@ class AnalyticsResponse(BaseModel):
 
 class StreamStartRequest(BaseModel):
     stream_id: str
+    source_type: str = "webcam"
+    source_url: str = "0"
     settings: Dict[str, Any] = {}
 
-@app.get("/health")
+class HealthResponse(BaseModel):
+    status: str
+    vibrio_ready: bool
+    moriarty_ready: bool
+    redis_connected: bool
+    active_streams: int
+    version: str
+
+@app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "vibrio_ready": vibrio_analyzer is not None,
-        "moriarty_ready": moriarty_pipeline is not None,
-        "redis_connected": redis_service and await redis_service.ping()
-    }
+    redis_connected = redis_service and await redis_service.ping()
+    active_streams = len(video_pipeline.active_streams) if video_pipeline else 0
+    
+    return HealthResponse(
+        status="healthy",
+        vibrio_ready=vibrio_analyzer is not None,
+        moriarty_ready=moriarty_pipeline is not None,
+        redis_connected=redis_connected,
+        active_streams=active_streams,
+        version="1.0.0"
+    )
 
 @app.post("/analytics/process_frame", response_model=AnalyticsResponse)
 async def process_frame(request: FrameProcessRequest):
     """Process a single frame with computer vision analytics"""
     try:
-        start_time = asyncio.get_event_loop().time()
+        start_time = time.time()
         
-        # Decode frame data
-        frame_array = np.frombuffer(request.frame_data, dtype=np.uint8)
+        # Decode base64 frame data
+        frame_bytes = base64.b64decode(request.frame_data)
+        frame_array = np.frombuffer(frame_bytes, dtype=np.uint8)
         frame = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
         
         if frame is None:
@@ -154,6 +178,8 @@ async def process_frame(request: FrameProcessRequest):
             logger.error("Moriarty analysis failed", error=str(moriarty_result))
             moriarty_result = None
         
+        processing_time = time.time() - start_time
+        
         # Combine results
         analytics = AnalyticsResult(
             stream_id=request.stream_id,
@@ -161,7 +187,7 @@ async def process_frame(request: FrameProcessRequest):
             timestamp=request.timestamp,
             vibrio=vibrio_result,
             moriarty=moriarty_result,
-            processing_time=asyncio.get_event_loop().time() - start_time
+            processing_time=processing_time
         )
         
         # Store in Redis for real-time access
@@ -173,7 +199,7 @@ async def process_frame(request: FrameProcessRequest):
         return AnalyticsResponse(
             success=True,
             analytics=analytics.dict(),
-            processing_time=analytics.processing_time
+            processing_time=processing_time
         )
         
     except Exception as e:
@@ -189,15 +215,40 @@ async def process_frame(request: FrameProcessRequest):
 async def start_stream_analytics(request: StreamStartRequest):
     """Start analytics processing for a stream"""
     try:
-        # Initialize stream analytics state
-        await redis_service.initialize_stream(request.stream_id, request.settings)
+        # Create stream configuration
+        source_type_map = {
+            "webcam": StreamSource.WEBCAM,
+            "file": StreamSource.FILE,
+            "rtmp": StreamSource.RTMP,
+            "http": StreamSource.HTTP_STREAM,
+            "udp": StreamSource.UDP
+        }
         
-        # Start background processing
-        await stream_service.start_stream_processing(request.stream_id)
+        source_type = source_type_map.get(request.source_type, StreamSource.WEBCAM)
         
-        logger.info("Started analytics for stream", stream_id=request.stream_id)
+        config = StreamConfig(
+            source_type=source_type,
+            source_url=request.source_url,
+            stream_id=request.stream_id,
+            **request.settings
+        )
         
-        return {"success": True, "stream_id": request.stream_id}
+        # Start video ingestion with analytics callback
+        success = await video_pipeline.start_stream(
+            config, 
+            lambda stream_id, frame, frame_idx: asyncio.create_task(
+                process_video_frame(stream_id, frame, frame_idx)
+            )
+        )
+        
+        if success:
+            # Initialize stream analytics state
+            await redis_service.initialize_stream(request.stream_id, request.settings)
+            
+            logger.info("Started analytics for stream", stream_id=request.stream_id)
+            return {"success": True, "stream_id": request.stream_id}
+        else:
+            raise Exception("Failed to start video stream")
         
     except Exception as e:
         logger.error("Failed to start stream analytics", error=str(e))
@@ -207,7 +258,7 @@ async def start_stream_analytics(request: StreamStartRequest):
 async def stop_stream_analytics(stream_id: str):
     """Stop analytics processing for a stream"""
     try:
-        await stream_service.stop_stream_processing(stream_id)
+        await video_pipeline.stop_stream(stream_id)
         await redis_service.cleanup_stream(stream_id)
         
         logger.info("Stopped analytics for stream", stream_id=stream_id)
@@ -228,6 +279,8 @@ async def get_latest_analytics(stream_id: str):
         
         return analytics
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to get analytics", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -243,6 +296,114 @@ async def get_stream_summary(stream_id: str):
         logger.error("Failed to get stream summary", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/analytics/{stream_id}/metrics")
+async def get_stream_metrics(stream_id: str):
+    """Get performance metrics for a stream"""
+    try:
+        summary = await redis_service.get_stream_summary(stream_id)
+        
+        metrics = {
+            "fps": summary.get("avg_fps", 0.0),
+            "detection_rate": summary.get("detection_rate", 0.0),
+            "pose_detection_rate": summary.get("pose_detection_rate", 0.0),
+            "error_rate": summary.get("error_rate", 0.0),
+            "avg_processing_time": summary.get("avg_processing_time", 0.0),
+            "total_frames": summary.get("total_frames", 0)
+        }
+        
+        return metrics
+        
+    except Exception as e:
+        logger.error("Failed to get stream metrics", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/analytics/{stream_id}/settings")
+async def update_stream_settings(stream_id: str, settings: Dict[str, Any]):
+    """Update analytics settings for a stream"""
+    try:
+        # Update settings in Redis
+        await redis_service.redis_client.hset(
+            f"stream:{stream_id}:settings",
+            mapping=settings
+        )
+        
+        logger.info("Updated settings for stream", stream_id=stream_id, settings=settings)
+        return {"success": True, "settings": settings}
+        
+    except Exception as e:
+        logger.error("Failed to update stream settings", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.websocket("/ws/{stream_id}")
+async def websocket_endpoint(websocket: WebSocket, stream_id: str):
+    """WebSocket endpoint for real-time analytics"""
+    await websocket.accept()
+    logger.info("WebSocket connected for stream", stream_id=stream_id)
+    
+    try:
+        # Subscribe to analytics updates for this stream
+        while True:
+            # Get latest analytics
+            analytics = await redis_service.get_latest_analytics(stream_id)
+            if analytics:
+                await websocket.send_json(analytics)
+            
+            # Wait a bit before next update
+            await asyncio.sleep(0.1)  # 10 FPS update rate
+            
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected for stream", stream_id=stream_id)
+    except Exception as e:
+        logger.error("WebSocket error", error=str(e), stream_id=stream_id)
+        await websocket.close()
+
+@app.get("/streams/active")
+async def get_active_streams():
+    """Get list of active streams"""
+    if video_pipeline:
+        return video_pipeline.list_active_streams()
+    return {}
+
+async def process_video_frame(stream_id: str, frame: np.ndarray, frame_idx: int):
+    """Process a video frame from the ingestion pipeline"""
+    try:
+        timestamp = time.time()
+        
+        # Process with both frameworks
+        vibrio_task = vibrio_analyzer.analyze_frame(frame, timestamp)
+        moriarty_task = moriarty_pipeline.analyze_frame(frame, timestamp)
+        
+        vibrio_result, moriarty_result = await asyncio.gather(
+            vibrio_task, moriarty_task, return_exceptions=True
+        )
+        
+        # Handle exceptions
+        if isinstance(vibrio_result, Exception):
+            logger.error("Vibrio analysis failed", error=str(vibrio_result))
+            vibrio_result = None
+        
+        if isinstance(moriarty_result, Exception):
+            logger.error("Moriarty analysis failed", error=str(moriarty_result))
+            moriarty_result = None
+        
+        # Create analytics result
+        analytics = AnalyticsResult(
+            stream_id=stream_id,
+            frame_idx=frame_idx,
+            timestamp=timestamp,
+            vibrio=vibrio_result,
+            moriarty=moriarty_result,
+            processing_time=time.time() - timestamp
+        )
+        
+        # Store and notify
+        await redis_service.store_analytics(stream_id, analytics)
+        await stream_service.notify_analytics_update(stream_id, analytics)
+        
+    except Exception as e:
+        logger.error("Error processing video frame", error=str(e), stream_id=stream_id)
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True) 
+    port = int(os.getenv("PORT", "8080"))
+    uvicorn.run(app, host="0.0.0.0", port=port, reload=True) 
