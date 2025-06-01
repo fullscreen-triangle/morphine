@@ -8,25 +8,27 @@ mod geolocation;
 mod reasoning;
 
 use axum::{
-    routing::{get, post, patch},
+    routing::{get, post, patch, delete},
     Router,
-    extract::Extension,
+    extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::Json as AxumJson,
 };
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
-use tracing::{info, warn};
+use tracing::{info, warn, error};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use sqlx::{Pool, Postgres};
 
 use crate::{
     config::Config,
     state::StateManager,
     stream::StreamManager,
     betting::BettingEngine,
-    websocket::websocket_handler,
+    websocket::WebSocketManager,
     orchestrator::MetacognitiveOrchestrator,
     geolocation::GeolocationService,
     reasoning::HybridReasoningEngine,
@@ -80,18 +82,60 @@ pub struct AppState {
     pub metacognitive_orchestrator: Arc<MetacognitiveOrchestrator>,
     pub geolocation_service: Arc<GeolocationService>,
     pub reasoning_engine: Arc<HybridReasoningEngine>,
+    pub websocket_manager: Arc<WebSocketManager>,
+    pub db_pool: Pool<Postgres>,
+}
+
+#[derive(Deserialize)]
+struct CreateStreamRequest {
+    title: String,
+    source_type: String,
+    source_url: String,
+    settings: Option<Value>,
+}
+
+#[derive(Serialize)]
+struct StreamResponse {
+    success: bool,
+    data: Option<Value>,
+    error: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PlaceBetRequest {
+    user_id: String,
+    stream_id: String,
+    bet_type: String,
+    stake_amount: f64,
+    prediction: Value,
+    time_window_seconds: u32,
+}
+
+#[derive(Serialize)]
+struct BetResponse {
+    success: bool,
+    bet_id: Option<String>,
+    message: String,
+    remaining_balance: Option<f64>,
+    bet_details: Option<Value>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
     
     info!("Starting Morphine Core Service");
 
     // Load configuration
     let config = Config::from_env()?;
     info!("Loaded configuration from environment");
+
+    // Initialize database connection
+    let db_pool = sqlx::postgres::PgPool::connect(&config.database_url).await?;
+    sqlx::migrate!("./migrations").run(&db_pool).await?;
 
     // Initialize state manager (Redis connection)
     let state_manager = Arc::new(StateManager::new(&config.redis_url).await?);
@@ -113,10 +157,13 @@ async fn main() -> Result<()> {
     let metacognitive_orchestrator = Arc::new(MetacognitiveOrchestrator::new().await);
     
     println!("🌍 Initializing Geolocation Verification System...");
-    let geolocation_service = Arc::new(GeolocationService::new().await);
+    let geolocation_service = Arc::new(GeolocationService::new(config.precision_timing_enabled));
     
     println!("🔀 Starting Hybrid Reasoning Engine...");
-    let reasoning_engine = Arc::new(HybridReasoningEngine::new().await);
+    let reasoning_engine = Arc::new(HybridReasoningEngine::new(config.reasoning_config.clone()).await?);
+
+    // Initialize websocket manager
+    let websocket_manager = Arc::new(WebSocketManager::new());
 
     // Create shared application state
     let app_state = AppState {
@@ -126,6 +173,8 @@ async fn main() -> Result<()> {
         metacognitive_orchestrator,
         geolocation_service,
         reasoning_engine,
+        websocket_manager,
+        db_pool,
     };
 
     // Register AI systems with the orchestrator
@@ -133,31 +182,34 @@ async fn main() -> Result<()> {
 
     // Build application routes
     let app = Router::new()
+        // Health check
         .route("/health", get(health_check))
-        .route("/system/health", get(system_health))
-        .route("/streams", get(list_streams))
-        .route("/streams/:stream_id/status", get(get_stream_status))
-        .route("/streams/:stream_id/activate", post(activate_stream))
-        .route("/bets", post(place_bet))
         
-        // Metacognitive orchestration endpoints
-        .route("/orchestrator/streaming-decision", post(process_streaming_decision))
-        .route("/orchestrator/streaming-decisions/:stream_id", get(get_streaming_decisions))
-        .route("/orchestrator/ai-systems", post(register_ai_system))
+        // Stream management
+        .route("/api/streams", get(list_streams))
+        .route("/api/streams", post(create_stream))
+        .route("/api/streams/:id", get(get_stream))
+        .route("/api/streams/:id/start", post(start_stream))
+        .route("/api/streams/:id/stop", post(stop_stream))
+        .route("/api/streams/:id/status", get(stream_status))
         
-        // Geolocation verification endpoints
-        .route("/geolocation/session/start/:user_id", post(start_location_session))
-        .route("/geolocation/update", post(update_location))
-        .route("/geolocation/exclusion-zones", post(add_exclusion_zone))
-        .route("/geolocation/verify-transaction", post(verify_transaction_location))
-        .route("/geolocation/user/:user_id/history", get(get_location_history))
-        .route("/geolocation/user/:user_id/excluded", get(check_user_exclusion))
+        // Betting endpoints
+        .route("/api/betting/place", post(place_bet))
+        .route("/api/betting/balance/:stream_id", get(get_balance))
+        .route("/api/betting/stream/:stream_id/activity", get(get_betting_activity))
+        .route("/api/betting/types", get(get_bet_types))
+        .route("/api/betting/resolve/:bet_id", post(resolve_bet))
         
-        // Hybrid reasoning endpoints
-        .route("/reasoning/evaluate-bet", post(evaluate_bet_outcome))
-        .route("/reasoning/distribute-prize/:pool_id", post(distribute_prize_pool))
-        .route("/reasoning/bet-trace/:bet_id", get(get_bet_reasoning_trace))
-        .route("/reasoning/paradigm-weights", patch(update_paradigm_weights))
+        // Analytics integration
+        .route("/api/analytics/:stream_id/notify", post(analytics_update))
+        .route("/api/analytics/:stream_id/history", get(get_analytics_history))
+        
+        // Geolocation verification
+        .route("/api/geolocation/verify", post(verify_location))
+        .route("/api/geolocation/session/start/:user_id", post(start_location_session))
+        
+        // WebSocket for real-time updates
+        .route("/ws/:stream_id", get(websocket_handler))
         
         .layer(CorsLayer::permissive())
         .layer(Extension(app_state));
@@ -183,8 +235,13 @@ async fn register_ai_systems(app_state: &AppState) -> Result<()> {
     Ok(())
 }
 
-async fn health_check() -> &'static str {
-    "Metacognitive orchestration system operational"
+async fn health_check() -> Json<Value> {
+    Json(json!({
+        "status": "healthy",
+        "service": "morphine-core",
+        "version": "1.0.0",
+        "timestamp": chrono::Utc::now().timestamp()
+    }))
 }
 
 async fn system_health(
@@ -209,209 +266,299 @@ async fn system_health(
     Ok(AxumJson(health))
 }
 
-async fn list_streams(
-    Extension(state): Extension<AppState>,
-) -> Result<AxumJson<Vec<stream::StreamInfo>>, StatusCode> {
+async fn list_streams(State(state): State<AppState>) -> Result<Json<StreamResponse>, StatusCode> {
     match state.stream_manager.list_streams().await {
-        Ok(streams) => Ok(AxumJson(streams)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(streams) => Ok(Json(StreamResponse {
+            success: true,
+            data: Some(json!(streams)),
+            error: None,
+        })),
+        Err(e) => {
+            error!("Failed to list streams: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
-async fn get_stream_status(
-    axum::extract::Path(stream_id): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
-) -> Result<AxumJson<stream::StreamStatus>, StatusCode> {
+async fn get_stream(
+    State(state): State<AppState>,
+    Path(stream_id): Path<String>,
+) -> Result<Json<StreamResponse>, StatusCode> {
+    match state.stream_manager.get_stream(&stream_id).await {
+        Ok(Some(stream)) => Ok(Json(StreamResponse {
+            success: true,
+            data: Some(json!(stream)),
+            error: None,
+        })),
+        Ok(None) => Ok(Json(StreamResponse {
+            success: false,
+            data: None,
+            error: Some("Stream not found".to_string()),
+        })),
+        Err(e) => {
+            error!("Failed to get stream {}: {}", stream_id, e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+async fn start_stream(
+    State(state): State<AppState>,
+    Path(stream_id): Path<String>,
+) -> Result<Json<StreamResponse>, StatusCode> {
+    match state.stream_manager.start_stream(&stream_id).await {
+        Ok(_) => {
+            info!("Started stream: {}", stream_id);
+            Ok(Json(StreamResponse {
+                success: true,
+                data: Some(json!({"status": "starting"})),
+                error: None,
+            }))
+        }
+        Err(e) => {
+            error!("Failed to start stream {}: {}", stream_id, e);
+            Ok(Json(StreamResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }))
+        }
+    }
+}
+
+async fn stop_stream(
+    State(state): State<AppState>,
+    Path(stream_id): Path<String>,
+) -> Result<Json<StreamResponse>, StatusCode> {
+    match state.stream_manager.stop_stream(&stream_id).await {
+        Ok(_) => {
+            info!("Stopped stream: {}", stream_id);
+            Ok(Json(StreamResponse {
+                success: true,
+                data: Some(json!({"status": "stopped"})),
+                error: None,
+            }))
+        }
+        Err(e) => {
+            error!("Failed to stop stream {}: {}", stream_id, e);
+            Ok(Json(StreamResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }))
+        }
+    }
+}
+
+async fn stream_status(
+    State(state): State<AppState>,
+    Path(stream_id): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
     match state.stream_manager.get_stream_status(&stream_id).await {
-        Ok(Some(status)) => Ok(AxumJson(status)),
-        Ok(None) => Err(StatusCode::NOT_FOUND),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-    }
-}
-
-async fn activate_stream(
-    axum::extract::Path(stream_id): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
-) -> Result<AxumJson<stream::ActivationResult>, StatusCode> {
-    match state.stream_manager.try_activate_stream(&stream_id).await {
-        Ok(result) => Ok(AxumJson(result)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(status) => Ok(Json(json!({
+            "success": true,
+            "status": status,
+            "timestamp": chrono::Utc::now().timestamp()
+        }))),
+        Err(e) => {
+            error!("Failed to get stream status for {}: {}", stream_id, e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
 async fn place_bet(
-    Extension(state): Extension<AppState>,
-    axum::Json(bet_request): axum::Json<betting::BetRequest>,
-) -> Result<AxumJson<betting::BetResult>, StatusCode> {
-    match state.betting_engine.place_bet(bet_request).await {
-        Ok(result) => Ok(AxumJson(result)),
-        Err(_) => Err(StatusCode::BAD_REQUEST),
-    }
-}
-
-async fn process_streaming_decision(
-    Extension(state): Extension<AppState>,
-    axum::Json(request): axum::Json<StreamingDecisionRequest>,
-) -> Result<AxumJson<orchestrator::MetacognitiveDecision>, StatusCode> {
-    // Create streaming context
-    let context = orchestrator::StreamingContext {
-        stream_id: request.stream_id.clone(),
-        timestamp: chrono::Utc::now().timestamp() as f64,
-        partial_data: request.context,
-        confidence_level: 0.8, // Would calculate based on data quality
-        processing_stage: orchestrator::ProcessingStage::Context,
+    State(state): State<AppState>,
+    Json(request): Json<PlaceBetRequest>,
+) -> Result<Json<BetResponse>, StatusCode> {
+    let bet_request = betting::BetRequest {
+        user_id: request.user_id,
+        stream_id: request.stream_id,
+        bet_type: request.bet_type.parse().unwrap_or_default(),
+        stake_amount: request.stake_amount,
+        prediction: request.prediction,
+        time_window_seconds: request.time_window_seconds,
     };
-    
-    // Update location if provided
-    if let Some(location_data) = request.location_data {
-        if let Ok(session_id) = state.geolocation_service.start_location_session(
-            "user_placeholder".to_string()
-        ).await {
-            let _ = state.geolocation_service.update_location_multi_source(
-                &session_id,
-                location_data.gps_data,
-                location_data.cell_towers,
-                location_data.wifi_points,
-                request.video_frame_hash
-            ).await;
+
+    match state.betting_engine.place_bet(bet_request).await {
+        Ok(result) => Ok(Json(BetResponse {
+            success: result.success,
+            bet_id: if result.success { Some(result.bet_id) } else { None },
+            message: result.message,
+            remaining_balance: Some(result.remaining_balance),
+            bet_details: result.bet_details.map(|bet| json!(bet)),
+        })),
+        Err(e) => {
+            error!("Failed to place bet: {}", e);
+            Ok(Json(BetResponse {
+                success: false,
+                bet_id: None,
+                message: format!("Failed to place bet: {}", e),
+                remaining_balance: None,
+                bet_details: None,
+            }))
         }
     }
+}
+
+async fn get_balance(
+    State(state): State<AppState>,
+    Path(stream_id): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
+    // For demo purposes, using a fixed user ID
+    let user_id = "demo-user";
     
-    // Create stream and get decision
-    let (input_tx, mut output_rx) = state.metacognitive_orchestrator.create_stream(request.stream_id).await;
-    
-    // Send context
-    if let Err(_) = input_tx.send(context).await {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-    
-    // Get decision (with timeout)
-    match tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        output_rx.recv()
-    ).await {
-        Ok(Some(decision)) => Ok(AxumJson(decision)),
-        _ => Err(StatusCode::REQUEST_TIMEOUT),
+    match state.betting_engine.get_user_balance(user_id, &stream_id).await {
+        Ok(balance) => Ok(Json(json!({
+            "success": true,
+            "data": {
+                "available": balance.available_balance(),
+                "total_deposited": balance.total_deposited,
+                "active_bets": balance.active_bets_total,
+                "total_winnings": balance.total_winnings,
+                "bet_count": balance.bet_count
+            }
+        }))),
+        Err(e) => {
+            error!("Failed to get balance: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
-async fn get_streaming_decisions(
-    axum::extract::Path(stream_id): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
-) -> Result<AxumJson<Vec<orchestrator::MetacognitiveDecision>>, StatusCode> {
-    let decisions = state.metacognitive_orchestrator.get_streaming_decisions(&stream_id).await;
-    Ok(AxumJson(decisions))
+async fn get_betting_activity(
+    State(state): State<AppState>,
+    Path(stream_id): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
+    match state.betting_engine.get_stream_activity(&stream_id).await {
+        Ok(activity) => Ok(Json(json!({
+            "success": true,
+            "data": activity
+        }))),
+        Err(e) => {
+            error!("Failed to get betting activity: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 }
 
-async fn register_ai_system(
-    Extension(_state): Extension<AppState>,
-    axum::Json(_request): axum::Json<serde_json::Value>,
-) -> Result<AxumJson<serde_json::Value>, StatusCode> {
-    // Would register actual AI system
-    Ok(AxumJson(serde_json::json!({"status": "registered"})))
+async fn get_bet_types() -> Json<Value> {
+    Json(json!({
+        "success": true,
+        "data": [
+            {
+                "id": "speed_milestone",
+                "name": "Speed Milestone",
+                "description": "Bet on reaching a specific speed"
+            },
+            {
+                "id": "pose_event",
+                "name": "Pose Event", 
+                "description": "Bet on specific pose or joint angles"
+            },
+            {
+                "id": "detection_count",
+                "name": "Object Count",
+                "description": "Bet on number of detected objects"
+            },
+            {
+                "id": "motion_threshold",
+                "name": "Motion Level",
+                "description": "Bet on motion energy levels"
+            }
+        ]
+    }))
+}
+
+async fn resolve_bet(
+    State(state): State<AppState>,
+    Path(bet_id): Path<String>,
+    Json(resolution): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    match state.betting_engine.resolve_bet(&bet_id, resolution).await {
+        Ok(resolved) => Ok(Json(json!({
+            "success": true,
+            "resolved": resolved
+        }))),
+        Err(e) => {
+            error!("Failed to resolve bet {}: {}", bet_id, e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+async fn analytics_update(
+    State(state): State<AppState>,
+    Path(stream_id): Path<String>,
+    Json(analytics): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    // Process analytics through the orchestrator
+    match state.metacognitive_orchestrator.process_analytics(&stream_id, analytics).await {
+        Ok(_) => Ok(Json(json!({"success": true}))),
+        Err(e) => {
+            error!("Failed to process analytics for stream {}: {}", stream_id, e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+async fn get_analytics_history(
+    State(state): State<AppState>,
+    Path(stream_id): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, StatusCode> {
+    let range = params.get("range").unwrap_or(&"5min".to_string()).clone();
+    
+    match state.state_manager.get_analytics_history(&stream_id, &range).await {
+        Ok(history) => Ok(Json(json!({
+            "success": true,
+            "data": history
+        }))),
+        Err(e) => {
+            error!("Failed to get analytics history: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+async fn verify_location(
+    State(state): State<AppState>,
+    Json(request): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    match state.geolocation_service.verify_location(request).await {
+        Ok(verification) => Ok(Json(json!({
+            "success": true,
+            "verification": verification
+        }))),
+        Err(e) => {
+            error!("Failed to verify location: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 }
 
 async fn start_location_session(
-    axum::extract::Path(user_id): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
-) -> Result<AxumJson<serde_json::Value>, StatusCode> {
-    match state.geolocation_service.start_location_session(user_id).await {
-        session_id => Ok(AxumJson(serde_json::json!({"session_id": session_id}))),
+    State(state): State<AppState>,
+    Path(user_id): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
+    match state.geolocation_service.start_session(&user_id).await {
+        Ok(session_id) => Ok(Json(json!({
+            "success": true,
+            "session_id": session_id
+        }))),
+        Err(e) => {
+            error!("Failed to start location session: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
-async fn update_location(
-    Extension(state): Extension<AppState>,
-    axum::Json(request): axum::Json<serde_json::Value>,
-) -> Result<AxumJson<geolocation::LocationVerification>, StatusCode> {
-    // Parse location update request and process
-    // This is a simplified version
-    let session_id = request.get("session_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("default");
-    
-    match state.geolocation_service.update_location_multi_source(
-        session_id,
-        None, // Would parse GPS data
-        Vec::new(), // Would parse cell tower data
-        Vec::new(), // Would parse WiFi data
-        None // Would parse video frame hash
-    ).await {
-        Ok(verification) => Ok(AxumJson(verification)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-    }
-}
-
-async fn add_exclusion_zone(
-    Extension(state): Extension<AppState>,
-    axum::Json(request): axum::Json<ExclusionZoneRequest>,
-) -> Result<AxumJson<serde_json::Value>, StatusCode> {
-    state.geolocation_service.add_exclusion_zone(request.zone).await;
-    Ok(AxumJson(serde_json::json!({"status": "added"})))
-}
-
-async fn verify_transaction_location(
-    Extension(_state): Extension<AppState>,
-    axum::Json(_request): axum::Json<serde_json::Value>,
-) -> Result<AxumJson<serde_json::Value>, StatusCode> {
-    // Would verify transaction location
-    Ok(AxumJson(serde_json::json!({"verified": true})))
-}
-
-async fn get_location_history(
-    axum::extract::Path(user_id): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
-) -> Result<AxumJson<Vec<geolocation::LocationVerification>>, StatusCode> {
-    let history = state.geolocation_service.get_location_history(&user_id).await;
-    Ok(AxumJson(history))
-}
-
-async fn check_user_exclusion(
-    axum::extract::Path(user_id): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
-) -> Result<AxumJson<serde_json::Value>, StatusCode> {
-    let is_excluded = state.geolocation_service.is_user_excluded(&user_id).await;
-    Ok(AxumJson(serde_json::json!({"excluded": is_excluded})))
-}
-
-async fn evaluate_bet_outcome(
-    Extension(state): Extension<AppState>,
-    axum::Json(request): axum::Json<BetEvaluationRequest>,
-) -> Result<AxumJson<reasoning::BetOutcome>, StatusCode> {
-    match state.reasoning_engine.evaluate_bet_outcome(
-        &request.bet_id,
-        &request.event_data,
-        &request.context
-    ).await {
-        Ok(outcome) => Ok(AxumJson(outcome)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-    }
-}
-
-async fn distribute_prize_pool(
-    axum::extract::Path(pool_id): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
-) -> Result<AxumJson<std::collections::HashMap<String, f64>>, StatusCode> {
-    match state.reasoning_engine.distribute_prize_pool(&pool_id).await {
-        Ok(distribution) => Ok(AxumJson(distribution)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-    }
-}
-
-async fn get_bet_reasoning_trace(
-    axum::extract::Path(bet_id): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
-) -> Result<AxumJson<Vec<reasoning::ReasoningStep>>, StatusCode> {
-    match state.reasoning_engine.get_reasoning_trace(&bet_id).await {
-        Some(trace) => Ok(AxumJson(trace)),
-        None => Err(StatusCode::NOT_FOUND),
-    }
-}
-
-async fn update_paradigm_weights(
-    Extension(state): Extension<AppState>,
-    axum::Json(weights): axum::Json<std::collections::HashMap<String, f64>>,
-) -> Result<AxumJson<serde_json::Value>, StatusCode> {
-    state.reasoning_engine.update_paradigm_weights(weights).await;
-    Ok(AxumJson(serde_json::json!({"status": "updated"})))
+async fn websocket_handler(
+    State(state): State<AppState>,
+    Path(stream_id): Path<String>,
+    ws: axum::extract::WebSocketUpgrade,
+) -> axum::response::Response {
+    ws.on_upgrade(move |socket| {
+        state.websocket_manager.handle_connection(stream_id, socket)
+    })
 } 

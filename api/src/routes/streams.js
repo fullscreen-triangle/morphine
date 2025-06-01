@@ -12,20 +12,13 @@ const ANALYTICS_SERVICE_URL = process.env.ANALYTICS_SERVICE_URL || 'http://local
 // Get all streams
 router.get('/', async (req, res) => {
   try {
-    const response = await axios.get(`${CORE_SERVICE_URL}/streams`, {
-      timeout: 5000
-    });
-    
-    res.json({
-      success: true,
-      streams: response.data
-    });
+    const response = await axios.get(`${CORE_SERVICE_URL}/api/streams`);
+    res.json(response.data);
   } catch (error) {
     logger.error('Failed to fetch streams:', error.message);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch streams',
-      message: error.message
+      error: 'Failed to fetch streams'
     });
   }
 });
@@ -35,14 +28,9 @@ router.get('/:streamId', async (req, res) => {
   try {
     const { streamId } = req.params;
     
-    const response = await axios.get(`${CORE_SERVICE_URL}/streams/${streamId}/status`, {
-      timeout: 5000
-    });
+    const response = await axios.get(`${CORE_SERVICE_URL}/api/streams/${streamId}`);
     
-    res.json({
-      success: true,
-      stream: response.data
-    });
+    res.json(response.data);
   } catch (error) {
     logger.error(`Failed to fetch stream ${req.params.streamId}:`, error.message);
     
@@ -55,8 +43,7 @@ router.get('/:streamId', async (req, res) => {
     
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch stream',
-      message: error.message
+      error: 'Failed to fetch stream'
     });
   }
 });
@@ -64,34 +51,52 @@ router.get('/:streamId', async (req, res) => {
 // Create new stream
 router.post('/', async (req, res) => {
   try {
-    const streamData = {
-      id: uuidv4(),
-      title: req.body.title || 'Untitled Stream',
-      description: req.body.description || '',
-      settings: {
-        enable_cv: req.body.enable_cv !== false,
-        enable_betting: req.body.enable_betting !== false,
-        quality: req.body.quality || '1080p',
-        ...req.body.settings
-      },
-      created_at: new Date().toISOString()
-    };
-    
-    // Store stream metadata in Redis
-    await setWithExpiry(`stream:${streamData.id}`, streamData, 86400); // 24 hours
-    
-    logger.info(`Created new stream: ${streamData.id}`);
-    
-    res.status(201).json({
-      success: true,
-      stream: streamData
+    const { title, source_type, source_url, settings } = req.body;
+
+    if (!title || !source_type || !source_url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: title, source_type, source_url'
+      });
+    }
+
+    // Create stream in core service
+    const coreResponse = await axios.post(`${CORE_SERVICE_URL}/api/streams`, {
+      title,
+      source_type,
+      source_url,
+      settings: settings || {}
     });
+
+    if (!coreResponse.data.success) {
+      return res.status(400).json(coreResponse.data);
+    }
+
+    const stream = coreResponse.data.data;
+
+    // Start analytics for the stream
+    try {
+      await axios.post(`${ANALYTICS_SERVICE_URL}/analytics/start_stream`, {
+        stream_id: stream.id,
+        source_type,
+        source_url,
+        settings: settings || {}
+      });
+    } catch (analyticsError) {
+      logger.warn('Failed to start analytics for stream:', analyticsError.message);
+    }
+
+    logger.info(`Created stream: ${stream.id} - ${title}`);
+    res.json({
+      success: true,
+      data: stream
+    });
+
   } catch (error) {
     logger.error('Failed to create stream:', error.message);
     res.status(500).json({
       success: false,
-      error: 'Failed to create stream',
-      message: error.message
+      error: 'Failed to create stream'
     });
   }
 });
@@ -111,9 +116,7 @@ router.post('/:streamId/activate', async (req, res) => {
     }
     
     // Activate stream in core service
-    const coreResponse = await axios.post(`${CORE_SERVICE_URL}/streams/${streamId}/activate`, {
-      timeout: 10000
-    });
+    const coreResponse = await axios.post(`${CORE_SERVICE_URL}/api/streams/${streamId}/start`);
     
     // Start analytics if enabled
     if (streamData.settings.enable_cv) {
@@ -149,9 +152,7 @@ router.post('/:streamId/deactivate', async (req, res) => {
     
     // Stop analytics
     try {
-      await axios.post(`${ANALYTICS_SERVICE_URL}/analytics/stop_stream/${streamId}`, {}, {
-        timeout: 5000
-      });
+      await axios.post(`${ANALYTICS_SERVICE_URL}/analytics/stop_stream/${streamId}`);
       logger.info(`Stopped analytics for stream: ${streamId}`);
     } catch (analyticsError) {
       logger.warn(`Failed to stop analytics for stream ${streamId}:`, analyticsError.message);
@@ -225,9 +226,7 @@ router.delete('/:streamId', async (req, res) => {
     
     // Stop analytics first
     try {
-      await axios.post(`${ANALYTICS_SERVICE_URL}/analytics/stop_stream/${streamId}`, {}, {
-        timeout: 5000
-      });
+      await axios.post(`${ANALYTICS_SERVICE_URL}/analytics/stop_stream/${streamId}`);
     } catch (analyticsError) {
       logger.warn(`Failed to stop analytics for stream ${streamId}:`, analyticsError.message);
     }
@@ -247,6 +246,95 @@ router.delete('/:streamId', async (req, res) => {
       success: false,
       error: 'Failed to delete stream',
       message: error.message
+    });
+  }
+});
+
+// Get stream analytics summary
+router.get('/:streamId/analytics', async (req, res) => {
+  try {
+    const { streamId } = req.params;
+    const response = await axios.get(`${ANALYTICS_SERVICE_URL}/analytics/${streamId}/summary`);
+    res.json({
+      success: true,
+      data: response.data
+    });
+  } catch (error) {
+    logger.error(`Failed to get analytics for stream ${req.params.streamId}:`, error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get stream analytics'
+    });
+  }
+});
+
+// Get stream metrics
+router.get('/:streamId/metrics', async (req, res) => {
+  try {
+    const { streamId } = req.params;
+    const response = await axios.get(`${ANALYTICS_SERVICE_URL}/analytics/${streamId}/metrics`);
+    res.json({
+      success: true,
+      data: response.data
+    });
+  } catch (error) {
+    logger.error(`Failed to get metrics for stream ${req.params.streamId}:`, error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get stream metrics'
+    });
+  }
+});
+
+// Get active streams (for dashboard)
+router.get('/status/active', async (req, res) => {
+  try {
+    const response = await axios.get(`${ANALYTICS_SERVICE_URL}/streams/active`);
+    res.json({
+      success: true,
+      data: response.data
+    });
+  } catch (error) {
+    logger.error('Failed to get active streams:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get active streams'
+    });
+  }
+});
+
+// Stream health check
+router.get('/:streamId/health', async (req, res) => {
+  try {
+    const { streamId } = req.params;
+    
+    // Check core service
+    const coreHealth = await axios.get(`${CORE_SERVICE_URL}/api/streams/${streamId}/status`);
+    
+    // Check analytics service
+    let analyticsHealth = { status: 'unknown' };
+    try {
+      const analyticsResponse = await axios.get(`${ANALYTICS_SERVICE_URL}/analytics/${streamId}/latest`);
+      analyticsHealth = { status: 'healthy', last_update: analyticsResponse.data?.timestamp };
+    } catch (analyticsError) {
+      analyticsHealth = { status: 'unhealthy', error: analyticsError.message };
+    }
+
+    res.json({
+      success: true,
+      data: {
+        stream_id: streamId,
+        core_service: coreHealth.data,
+        analytics_service: analyticsHealth,
+        overall_status: analyticsHealth.status === 'healthy' ? 'healthy' : 'degraded'
+      }
+    });
+
+  } catch (error) {
+    logger.error(`Failed to check health for stream ${req.params.streamId}:`, error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to check stream health'
     });
   }
 });
